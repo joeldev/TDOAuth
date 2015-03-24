@@ -154,7 +154,7 @@ static NSString* timestamp() {
 }
 
 // unencodedParameters are encoded and assigned to self->params, returns encoded queryString
-- (id)setParameters:(NSDictionary *)unencodedParameters {
+- (NSString *)setParameters:(NSDictionary *)unencodedParameters {
     NSMutableString *queryString = [NSMutableString string];
     NSMutableDictionary *encodedParameters = [NSMutableDictionary new];
     for (NSString *key in unencodedParameters.allKeys)
@@ -169,67 +169,13 @@ static NSString* timestamp() {
     }
     TDChomp(queryString);
     params = [encodedParameters copy];
-    return queryString;
-}
-
-+ (NSURLRequest *)URLRequestForPath:(NSString *)unencodedPathWithoutQuery
-                      GETParameters:(NSDictionary *)unencodedParameters
-                               host:(NSString *)host
-                        consumerKey:(NSString *)consumerKey
-                     consumerSecret:(NSString *)consumerSecret
-                        accessToken:(NSString *)accessToken
-                        tokenSecret:(NSString *)tokenSecret
-{
-    return [self URLRequestForPath:unencodedPathWithoutQuery
-                     GETParameters:unencodedParameters
-                            scheme:@"http"
-                              host:host
-                       consumerKey:consumerKey
-                    consumerSecret:consumerSecret
-                       accessToken:accessToken
-                       tokenSecret:tokenSecret];
-}
-
-+ (NSURLRequest *)URLRequestForPath:(NSString *)unencodedPathWithoutQuery
-                      GETParameters:(NSDictionary *)unencodedParameters
-                             scheme:(NSString *)scheme
-                               host:(NSString *)host
-                        consumerKey:(NSString *)consumerKey
-                     consumerSecret:(NSString *)consumerSecret
-                        accessToken:(NSString *)accessToken
-                        tokenSecret:(NSString *)tokenSecret;
-{
-    if (!host || !unencodedPathWithoutQuery)
-        return nil;
-
-    TDOAuth *oauth = [[TDOAuth alloc] initWithConsumerKey:consumerKey
-                                           consumerSecret:consumerSecret
-                                              accessToken:accessToken
-                                              tokenSecret:tokenSecret];
-
-    // We don't use pcen as we don't want to percent encode eg. /, this is perhaps
-	// not the most all encompassing solution, but in practice it seems to work
-	// everywhere and means that programmer error is *much* less likely.
-    NSString *encodedPathWithoutQuery = [unencodedPathWithoutQuery stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
-
-    id path = [oauth setParameters:unencodedParameters];
-    if (path) {
-        [path insertString:@"?" atIndex:0];
-        [path insertString:encodedPathWithoutQuery atIndex:0];
-    } else {
-        path = encodedPathWithoutQuery;
-    }
-
-    oauth->method = @"GET";
-    oauth->unencodedHostAndPathWithoutQuery = [host.lowercaseString stringByAppendingString:unencodedPathWithoutQuery];
-    oauth->url = [[NSURL alloc] initWithString:[NSString stringWithFormat:@"%@://%@%@", scheme, host, path]];
-
-    NSURLRequest *rq = [oauth request];
-    return rq;
+    return [queryString copy];
 }
 
 + (NSURLRequest *)URLRequestForPath:(NSString *)unencodedPath
-                     POSTParameters:(NSDictionary *)unencodedParameters
+                         parameters:(NSDictionary *)unencodedParameters
+                             method:(NSString *)method
+                             scheme:(NSString *)scheme
                                host:(NSString *)host
                         consumerKey:(NSString *)consumerKey
                      consumerSecret:(NSString *)consumerSecret
@@ -238,25 +184,41 @@ static NSString* timestamp() {
 {
     if (!host || !unencodedPath)
         return nil;
-
+    
     TDOAuth *oauth = [[TDOAuth alloc] initWithConsumerKey:consumerKey
                                            consumerSecret:consumerSecret
                                               accessToken:accessToken
                                               tokenSecret:tokenSecret];
-
+    
+    NSString *encodedPathWithoutQuery = [unencodedPath stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+    NSString *paramString = [oauth setParameters:unencodedParameters];
+    
     oauth->unencodedHostAndPathWithoutQuery = [host.lowercaseString stringByAppendingString:unencodedPath];
-    oauth->url = [[NSURL alloc] initWithScheme:@"https" host:host path:unencodedPath];
-    oauth->method = @"POST";
-
-    NSMutableString *postbody = [oauth setParameters:unencodedParameters];
-    NSMutableURLRequest *rq = [oauth request];
-
-    if (postbody.length) {
-        [rq setHTTPBody:[postbody dataUsingEncoding:NSUTF8StringEncoding]];
-        [rq setValue:@"application/x-www-form-urlencoded" forHTTPHeaderField:@"Content-Type"];
-        [rq setValue:[NSString stringWithFormat:@"%lu", (unsigned long)rq.HTTPBody.length] forHTTPHeaderField:@"Content-Length"];
+    oauth->method = method;
+    
+    NSMutableURLRequest *rq = nil;
+    
+    if ([method isEqualToString:@"GET"] || [method isEqualToString:@"DELETE"])
+    {
+        NSString *path = encodedPathWithoutQuery;
+        if (paramString.length > 0) {
+            path = [NSString stringWithFormat:@"%@?%@", encodedPathWithoutQuery, paramString];
+        }
+        oauth->url = [[NSURL alloc] initWithString:[NSString stringWithFormat:@"%@://%@%@", scheme, host, path]];
+        rq = [oauth request];
     }
-
+    else if ([method isEqualToString:@"POST"] || [method isEqualToString:@"PUT"])
+    {
+        oauth->url = [[NSURL alloc] initWithScheme:scheme host:host path:unencodedPath];
+        rq = [oauth request];
+        
+        if (paramString.length > 0) {
+            [rq setHTTPBody:[paramString dataUsingEncoding:NSUTF8StringEncoding]];
+            [rq setValue:@"application/x-www-form-urlencoded" forHTTPHeaderField:@"Content-Type"];
+            [rq setValue:[NSString stringWithFormat:@"%lu", (unsigned long)rq.HTTPBody.length] forHTTPHeaderField:@"Content-Length"];
+        }
+    }
+    
     return rq;
 }
 

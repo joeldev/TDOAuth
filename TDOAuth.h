@@ -29,49 +29,12 @@
 
 #import <Foundation/Foundation.h>
 
-/**
-  This OAuth implementation doesn't cover the whole spec (eg. it’s HMAC only).
-  But you'll find it works with almost all the OAuth implementations you need
-  to interact with in the wild. How ace is that?!
-*/
-
 @interface TDOAuth : NSObject
-/**
-  @p unencodeParameters may be nil. Objects in the dictionary must be strings.
-  You are contracted to consume the NSURLRequest *immediately*. Don't put the
-  queryParameters in the path as a query string! Path MUST start with a slash!
-  Don't percent encode anything! This will submit via HTTP. If you need HTTPS refer
-  to the next selector.
-*/
-+ (NSURLRequest *)URLRequestForPath:(NSString *)unencodedPath_WITHOUT_Query
-                      GETParameters:(NSDictionary *)unencodedParameters
-                               host:(NSString *)host
-                        consumerKey:(NSString *)consumerKey
-                     consumerSecret:(NSString *)consumerSecret
-                        accessToken:(NSString *)accessToken
-                        tokenSecret:(NSString *)tokenSecret;
 
-/**
-  Some services insist on HTTPS. Or maybe you don't want the data to be sniffed.
-  You can pass @"https" via the scheme parameter.
-*/
-+ (NSURLRequest *)URLRequestForPath:(NSString *)unencodedPath_WITHOUT_Query
-                      GETParameters:(NSDictionary *)unencodedParameters
-                             scheme:(NSString *)scheme
-                               host:(NSString *)host
-                        consumerKey:(NSString *)consumerKey
-                     consumerSecret:(NSString *)consumerSecret
-                        accessToken:(NSString *)accessToken
-                        tokenSecret:(NSString *)tokenSecret;
-
-/**
-  We always POST with HTTPS. This is because at least half the time the user's
-  data is at least somewhat private, but also because apparently some carriers
-  mangle POST requests and break them. We saw this in France for example.
-  READ THE DOCUMENTATION FOR GET AS IT APPLIES HERE TOO!
-*/
 + (NSURLRequest *)URLRequestForPath:(NSString *)unencodedPath
-                     POSTParameters:(NSDictionary *)unencodedParameters
+                         parameters:(NSDictionary *)unencodedParameters
+                             method:(NSString *)method
+                             scheme:(NSString *)scheme
                                host:(NSString *)host
                         consumerKey:(NSString *)consumerKey
                      consumerSecret:(NSString *)consumerSecret
@@ -88,49 +51,3 @@
 
 @end
 
-
-/**
-  XAuth example (because you may otherwise be scratching your head):
-
-    NSURLRequest *xauth = [TDOAuth URLRequestForPath:@"/oauth/access_token"
-                                      POSTParameters:[NSDictionary dictionaryWithObjectsAndKeys:
-                                                      username, @"x_auth_username",
-                                                      password, @"x_auth_password",
-                                                      @"client_auth", @"x_auth_mode",
-                                                      nil]
-                                                host:@"api.twitter.com"
-                                         consumerKey:CONSUMER_KEY
-                                      consumerSecret:CONSUMER_SECRET
-                                         accessToken:nil
-                                         tokenSecret:nil];
-
-  OAuth Echo example (we have found that some consumers require HTTPS for the
-  echo, so to be safe we always do it):
-
-    NSURLRequest *echo = [TDOAuth URLRequestForPath:@"/1/account/verify_credentials.json"
-                                      GETParameters:nil
-                                             scheme:@"https"
-                                               host:@"api.twitter.com"
-                                        consumerKey:CONSUMER_KEY
-                                     consumerSecret:CONSUMER_SECRET
-                                        accessToken:accessToken
-                                        tokenSecret:tokenSecret];
-    NSMutableURLRequest *rq = [NSMutableURLRequest new];
-    [rq setValue:[[echo URL] absoluteString] forHTTPHeaderField:@"X-Auth-Service-Provider"];
-    [rq setValue:[echo valueForHTTPHeaderField:@"Authorization"] forHTTPHeaderField:@"X-Verify-Credentials-Authorization"];
-    // Now consume rq with an NSURLConnection
-    [rq release];
-*/
-
-
-/**
-  Suggested usage would be to make some categories for this class that
-  automatically adds both secrets, both tokens and host information. This
-  makes usage less cumbersome. Eg:
-
-      [TwitterOAuth GET:@"/1/statuses/home_timeline.json"];
-      [TwitterOAuth GET:@"/1/statuses/home_timeline.json" queryParameters:dictionary];
-
-  At TweetDeck we have TDAccount classes that represent separate user logins
-  for different services when instantiated.
-*/
